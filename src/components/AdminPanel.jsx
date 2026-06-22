@@ -1,6 +1,59 @@
 import { useState, useEffect, useCallback } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { EVENT, formatARS } from '../lib/event'
+
+const CATEGORY_LABEL = {
+  adulto: 'Adulto/a',
+  menor: 'Menor de 10',
+  alumno: 'Alumno/a',
+}
+const METHOD_LABEL = {
+  transferencia: 'Transferencia',
+  efectivo: 'Efectivo',
+}
+
+// Arma el Excel con una fila por asistente y lo descarga.
+function exportToExcel(reservations) {
+  const rows = []
+  reservations.forEach((r) => {
+    const fecha = r.created_at
+      ? new Date(r.created_at).toLocaleString('es-AR')
+      : ''
+    r.attendees.forEach((a) => {
+      const dias = [a.day_sab && 'Sábado 27', a.day_dom && 'Domingo 28']
+        .filter(Boolean)
+        .join(' + ')
+      rows.push({
+        'Registrante': `${r.first_name} ${r.last_name}`,
+        'Email': r.email,
+        'Alumno': r.student_name || '',
+        'Asistente': `${a.first_name} ${a.last_name}`,
+        'Categoría': CATEGORY_LABEL[a.category] || a.category,
+        'Días': dias || '—',
+        'Asiento asegurado': a.needs_seat ? 'Sí' : 'No',
+        'Precio': a.price || 0,
+        'Total reserva': r.total_amount || 0,
+        'Método de pago': METHOD_LABEL[r.payment_method] || '',
+        'Pagado': r.paid ? 'Sí' : 'No',
+        'Fecha de registro': fecha,
+      })
+    })
+  })
+
+  const ws = XLSX.utils.json_to_sheet(rows)
+  // Ancho de columnas para que se lea bien
+  ws['!cols'] = [
+    { wch: 22 }, { wch: 26 }, { wch: 18 }, { wch: 22 }, { wch: 14 },
+    { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 13 }, { wch: 16 },
+    { wch: 8 }, { wch: 20 },
+  ]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Inscriptos')
+
+  const fecha = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `inscriptos-evento-otoha-${fecha}.xlsx`)
+}
 
 export default function AdminPanel({ session }) {
   if (!session) return <Login />
@@ -146,12 +199,21 @@ function Dashboard() {
           <p className="eyebrow">Panel de administración</p>
           <h2 className="text-2xl font-bold text-ink">Reservas del evento</h2>
         </div>
-        <button
-          onClick={() => supabase.auth.signOut()}
-          className="btn-ghost text-sm"
-        >
-          Cerrar sesión
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportToExcel(reservations)}
+            disabled={reservations.length === 0}
+            className="btn-gold text-sm"
+          >
+            ↓ Exportar a Excel
+          </button>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="btn-ghost text-sm"
+          >
+            Cerrar sesión
+          </button>
+        </div>
       </div>
 
       {/* Métricas */}
@@ -278,6 +340,7 @@ function ReservationCard({ r, onTogglePaid, onSetMethod, onRemove }) {
               className="mt-1 rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-xs text-ink/70"
             >
               <option value="">Sin método</option>
+              <option value="mercadopago">Mercado Pago</option>
               <option value="transferencia">Transferencia</option>
               <option value="efectivo">Efectivo</option>
             </select>
