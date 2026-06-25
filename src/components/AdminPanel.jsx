@@ -15,6 +15,8 @@ const METHOD_LABEL = {
 
 // Estado de pago según el monto abonado: 'pagado' | 'parcial' | 'pendiente'
 function paymentStatus(r) {
+  // Reservas sin costo: dependen del flag paid (confirmada o no)
+  if (r.total_amount <= 0) return r.paid ? 'pagado' : 'pendiente'
   const paid = r.amount_paid || 0
   if (paid <= 0) return 'pendiente'
   if (paid >= r.total_amount) return 'pagado'
@@ -344,12 +346,17 @@ function ReservationCard({
   const status = paymentStatus(r)
   const remaining = Math.max(0, r.total_amount - (r.amount_paid || 0))
 
+  const freeReservation = r.total_amount <= 0
   const badge =
     status === 'pagado'
-      ? { text: '✓ Pagado', cls: 'bg-moss/15 text-moss' }
+      ? freeReservation
+        ? { text: '✓ Confirmada', cls: 'bg-moss/15 text-moss' }
+        : { text: '✓ Pagado', cls: 'bg-moss/15 text-moss' }
       : status === 'parcial'
         ? { text: 'Pago parcial', cls: 'bg-gold/20 text-gold' }
-        : { text: 'Pendiente', cls: 'bg-ink/10 text-ink/50' }
+        : freeReservation
+          ? { text: 'Sin confirmar', cls: 'bg-ink/10 text-ink/50' }
+          : { text: 'Pendiente', cls: 'bg-ink/10 text-ink/50' }
 
   return (
     <div className="card overflow-hidden">
@@ -380,22 +387,25 @@ function ReservationCard({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-start justify-end gap-3">
-          <div className="text-right">
-            <p className="font-display text-lg font-bold text-wine">
-              {formatARS(r.total_amount)}
-            </p>
+        <div className="flex flex-wrap items-start justify-end gap-x-4 gap-y-2">
+          {/* Total + estado */}
+          <div className="flex flex-col items-end">
+            <div className="flex h-9 items-center">
+              <p className="font-display text-lg font-bold text-wine">
+                {formatARS(r.total_amount)}
+              </p>
+            </div>
             <span
-              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}
             >
               {badge.text}
             </span>
           </div>
 
+          {/* Abonado (solo si hay monto) */}
           {r.total_amount > 0 && (
-            <div className="flex flex-col items-end gap-1">
-              <label className="text-[11px] text-ink/50">Abonado</label>
-              <div className="flex items-center gap-1">
+            <div className="flex flex-col items-end">
+              <div className="flex h-9 items-center gap-1">
                 <span className="text-ink/40">$</span>
                 <input
                   type="number"
@@ -404,48 +414,53 @@ function ReservationCard({
                   value={amountInput}
                   onChange={(e) => setAmountInput(e.target.value)}
                   onBlur={() => onSetAmountPaid(amountInput)}
-                  className="w-24 rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-right text-sm text-ink"
+                  className="w-24 rounded-lg border border-ink/15 bg-cream-soft px-2 py-1.5 text-right text-sm text-ink"
                 />
               </div>
-              {remaining > 0 ? (
-                <span className="text-[11px] text-wine/70">
-                  Resta {formatARS(remaining)}
-                </span>
-              ) : (
-                <span className="text-[11px] text-moss">Saldado</span>
-              )}
+              <span className="text-[11px] text-ink/45">
+                Abonado ·{' '}
+                {remaining > 0 ? (
+                  <span className="text-wine/70">resta {formatARS(remaining)}</span>
+                ) : (
+                  <span className="text-moss">saldado</span>
+                )}
+              </span>
             </div>
           )}
 
-          <div className="flex flex-col items-end gap-1">
-            <select
-              value={r.payment_method || ''}
-              onChange={(e) => onSetMethod(e.target.value)}
-              className="rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-xs text-ink/70"
-            >
-              <option value="">Sin método</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="efectivo">Efectivo</option>
-            </select>
-            {r.total_amount > 0 &&
-              (status !== 'pagado' ? (
-                <button
-                  onClick={() => {
-                    onMarkFullyPaid()
-                    setAmountInput(String(r.total_amount))
-                  }}
-                  className="text-[11px] font-medium text-moss hover:underline"
-                >
-                  Marcar pago total
-                </button>
-              ) : (
-                <span className="text-[11px] text-moss">✓ Pago completo</span>
-              ))}
+          {/* Método + acción */}
+          <div className="flex flex-col items-end">
+            <div className="flex h-9 items-center">
+              <select
+                value={r.payment_method || ''}
+                onChange={(e) => onSetMethod(e.target.value)}
+                className="rounded-lg border border-ink/15 bg-cream-soft px-2 py-1.5 text-xs text-ink/70"
+              >
+                <option value="">Sin método</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="efectivo">Efectivo</option>
+              </select>
+            </div>
+            {status === 'pagado' ? (
+              <span className="text-[11px] text-moss">
+                {r.total_amount > 0 ? '✓ Pago completo' : '✓ Confirmada'}
+              </span>
+            ) : (
+              <button
+                onClick={() => {
+                  onMarkFullyPaid()
+                  setAmountInput(String(r.total_amount))
+                }}
+                className="text-[11px] font-medium text-moss hover:underline"
+              >
+                {r.total_amount > 0 ? 'Marcar pago total' : 'Marcar confirmada'}
+              </button>
+            )}
           </div>
 
           <button
             onClick={onRemove}
-            className="self-start text-xs text-wine/60 hover:text-wine"
+            className="flex h-9 items-center text-xs text-wine/60 hover:text-wine"
             title="Borrar reserva"
           >
             ✕
