@@ -13,6 +13,14 @@ const METHOD_LABEL = {
   efectivo: 'Efectivo',
 }
 
+// Estado de pago según el monto abonado: 'pagado' | 'parcial' | 'pendiente'
+function paymentStatus(r) {
+  const paid = r.amount_paid || 0
+  if (paid <= 0) return 'pendiente'
+  if (paid >= r.total_amount) return 'pagado'
+  return 'parcial'
+}
+
 // Arma el Excel con una fila por asistente y lo descarga.
 function exportToExcel(reservations) {
   const rows = []
@@ -34,8 +42,14 @@ function exportToExcel(reservations) {
         'Asiento asegurado': a.needs_seat ? 'Sí' : 'No',
         'Precio': a.price || 0,
         'Total reserva': r.total_amount || 0,
+        'Abonado': r.amount_paid || 0,
+        'Saldo': Math.max(0, (r.total_amount || 0) - (r.amount_paid || 0)),
         'Método de pago': METHOD_LABEL[r.payment_method] || '',
-        'Pagado': r.paid ? 'Sí' : 'No',
+        'Estado': r.paid
+          ? 'Pagado'
+          : (r.amount_paid || 0) > 0
+            ? 'Parcial'
+            : 'Pendiente',
         'Fecha de registro': fecha,
       })
     })
@@ -45,8 +59,8 @@ function exportToExcel(reservations) {
   // Ancho de columnas para que se lea bien
   ws['!cols'] = [
     { wch: 22 }, { wch: 26 }, { wch: 18 }, { wch: 22 }, { wch: 14 },
-    { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 13 }, { wch: 16 },
-    { wch: 8 }, { wch: 20 },
+    { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 13 }, { wch: 10 },
+    { wch: 10 }, { wch: 16 }, { wch: 11 }, { wch: 20 },
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Inscriptos')
@@ -144,10 +158,18 @@ function Dashboard() {
     load()
   }, [load])
 
-  async function togglePaid(r) {
+  async function setAmountPaid(r, amount) {
+    const clean = Math.max(0, Math.min(Number(amount) || 0, r.total_amount))
     await supabase
       .from('reservations')
-      .update({ paid: !r.paid })
+      .update({ amount_paid: clean, paid: clean >= r.total_amount })
+      .eq('id', r.id)
+    load()
+  }
+  async function markFullyPaid(r) {
+    await supabase
+      .from('reservations')
+      .update({ amount_paid: r.total_amount, paid: true })
       .eq('id', r.id)
     load()
   }
@@ -169,7 +191,8 @@ function Dashboard() {
     (s, r) => {
       s.people += r.attendees.length
       s.expected += r.total_amount
-      if (r.paid) s.collected += r.total_amount
+      s.collected += r.amount_paid || 0
+      s.pending += Math.max(0, r.total_amount - (r.amount_paid || 0))
       s.seats += r.attendees.filter((a) => a.needs_seat).length
       EVENT.days.forEach((d) => {
         r.attendees.forEach((a) => {
@@ -183,14 +206,19 @@ function Dashboard() {
       people: 0,
       expected: 0,
       collected: 0,
+      pending: 0,
       seats: 0,
       perDay: { sab: 0, dom: 0 },
     }
   )
 
-  const filtered = reservations.filter((r) =>
-    filter === 'pagadas' ? r.paid : filter === 'pendientes' ? !r.paid : true
-  )
+  const filtered = reservations.filter((r) => {
+    const st = paymentStatus(r)
+    if (filter === 'pagadas') return st === 'pagado'
+    if (filter === 'parciales') return st === 'parcial'
+    if (filter === 'pendientes') return st === 'pendiente'
+    return true
+  })
 
   return (
     <div className="space-y-6 py-2">
@@ -228,22 +256,27 @@ function Dashboard() {
         <Stat label={EVENT.days[0].short} value={stats.perDay.sab} />
         <Stat label={EVENT.days[1].short} value={stats.perDay.dom} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Stat
           label="Total esperado"
           value={formatARS(stats.expected)}
           accent="wine"
         />
         <Stat
-          label="Cobrado (marcado como pagado)"
+          label="Cobrado (incluye parciales)"
           value={formatARS(stats.collected)}
           accent="moss"
+        />
+        <Stat
+          label="Resto a cobrar"
+          value={formatARS(stats.pending)}
+          accent="gold"
         />
       </div>
 
       {/* Filtro */}
       <div className="flex gap-2">
-        {['todas', 'pendientes', 'pagadas'].map((f) => (
+        {['todas', 'pendientes', 'parciales', 'pagadas'].map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -270,7 +303,8 @@ function Dashboard() {
             <ReservationCard
               key={r.id}
               r={r}
-              onTogglePaid={() => togglePaid(r)}
+              onSetAmountPaid={(amt) => setAmountPaid(r, amt)}
+              onMarkFullyPaid={() => markFullyPaid(r)}
               onSetMethod={(m) => setMethod(r, m)}
               onRemove={() => remove(r)}
             />
@@ -298,8 +332,25 @@ function Stat({ label, value, accent }) {
   )
 }
 
-function ReservationCard({ r, onTogglePaid, onSetMethod, onRemove }) {
+function ReservationCard({
+  r,
+  onSetAmountPaid,
+  onMarkFullyPaid,
+  onSetMethod,
+  onRemove,
+}) {
   const [open, setOpen] = useState(false)
+  const [amountInput, setAmountInput] = useState(String(r.amount_paid || 0))
+  const status = paymentStatus(r)
+  const remaining = Math.max(0, r.total_amount - (r.amount_paid || 0))
+
+  const badge =
+    status === 'pagado'
+      ? { text: '✓ Pagado', cls: 'bg-moss/15 text-moss' }
+      : status === 'parcial'
+        ? { text: 'Pago parcial', cls: 'bg-gold/20 text-gold' }
+        : { text: 'Pendiente', cls: 'bg-ink/10 text-ink/50' }
+
   return (
     <div className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -329,35 +380,69 @@ function ReservationCard({ r, onTogglePaid, onSetMethod, onRemove }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-end justify-end gap-3">
           <div className="text-right">
             <p className="font-display text-lg font-bold text-wine">
               {formatARS(r.total_amount)}
             </p>
+            <span
+              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.cls}`}
+            >
+              {badge.text}
+            </span>
+          </div>
+
+          {r.total_amount > 0 && (
+            <div className="flex flex-col items-end gap-1">
+              <label className="text-[11px] text-ink/50">Abonado</label>
+              <div className="flex items-center gap-1">
+                <span className="text-ink/40">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  max={r.total_amount}
+                  value={amountInput}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                  onBlur={() => onSetAmountPaid(amountInput)}
+                  className="w-24 rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-right text-sm text-ink"
+                />
+              </div>
+              {remaining > 0 ? (
+                <span className="text-[11px] text-wine/70">
+                  Resta {formatARS(remaining)}
+                </span>
+              ) : (
+                <span className="text-[11px] text-moss">Saldado</span>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col items-end gap-1">
             <select
               value={r.payment_method || ''}
               onChange={(e) => onSetMethod(e.target.value)}
-              className="mt-1 rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-xs text-ink/70"
+              className="rounded-lg border border-ink/15 bg-cream-soft px-2 py-1 text-xs text-ink/70"
             >
               <option value="">Sin método</option>
-              <option value="mercadopago">Mercado Pago</option>
               <option value="transferencia">Transferencia</option>
               <option value="efectivo">Efectivo</option>
             </select>
+            {r.total_amount > 0 && status !== 'pagado' && (
+              <button
+                onClick={() => {
+                  onMarkFullyPaid()
+                  setAmountInput(String(r.total_amount))
+                }}
+                className="text-[11px] font-medium text-moss hover:underline"
+              >
+                Marcar pago total
+              </button>
+            )}
           </div>
-          <button
-            onClick={onTogglePaid}
-            className={`btn text-sm ${
-              r.paid
-                ? 'bg-moss text-cream-soft'
-                : 'border border-ink/15 text-ink/60 hover:border-moss hover:text-moss'
-            }`}
-          >
-            {r.paid ? '✓ Pagado' : 'Marcar pagado'}
-          </button>
+
           <button
             onClick={onRemove}
-            className="text-xs text-wine/60 hover:text-wine"
+            className="self-start text-xs text-wine/60 hover:text-wine"
             title="Borrar reserva"
           >
             ✕
