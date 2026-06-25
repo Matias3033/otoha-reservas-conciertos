@@ -380,7 +380,7 @@ function ReservationCard({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-end justify-end gap-3">
+        <div className="flex flex-wrap items-start justify-end gap-3">
           <div className="text-right">
             <p className="font-display text-lg font-bold text-wine">
               {formatARS(r.total_amount)}
@@ -427,17 +427,20 @@ function ReservationCard({
               <option value="transferencia">Transferencia</option>
               <option value="efectivo">Efectivo</option>
             </select>
-            {r.total_amount > 0 && status !== 'pagado' && (
-              <button
-                onClick={() => {
-                  onMarkFullyPaid()
-                  setAmountInput(String(r.total_amount))
-                }}
-                className="text-[11px] font-medium text-moss hover:underline"
-              >
-                Marcar pago total
-              </button>
-            )}
+            {r.total_amount > 0 &&
+              (status !== 'pagado' ? (
+                <button
+                  onClick={() => {
+                    onMarkFullyPaid()
+                    setAmountInput(String(r.total_amount))
+                  }}
+                  className="text-[11px] font-medium text-moss hover:underline"
+                >
+                  Marcar pago total
+                </button>
+              ) : (
+                <span className="text-[11px] text-moss">✓ Pago completo</span>
+              ))}
           </div>
 
           <button
