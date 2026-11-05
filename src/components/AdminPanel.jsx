@@ -30,6 +30,9 @@ function exportToExcel(reservations) {
     const fecha = r.created_at
       ? new Date(r.created_at).toLocaleString('es-AR')
       : ''
+    const extrasTexto = [...(r.merch_items || []), ...(r.snack_items || [])]
+      .map((item) => `${item.qty}x ${item.name}`)
+      .join(', ')
     r.attendees.forEach((a) => {
       const dias = [a.day_sab && 'Sábado 27', a.day_dom && 'Domingo 28']
         .filter(Boolean)
@@ -47,6 +50,7 @@ function exportToExcel(reservations) {
         'Abonado': r.amount_paid || 0,
         'Saldo': Math.max(0, (r.total_amount || 0) - (r.amount_paid || 0)),
         'Método de pago': METHOD_LABEL[r.payment_method] || '',
+        'Merch / comida': extrasTexto || '',
         'Estado': r.paid
           ? 'Pagado'
           : (r.amount_paid || 0) > 0
@@ -62,7 +66,7 @@ function exportToExcel(reservations) {
   ws['!cols'] = [
     { wch: 22 }, { wch: 26 }, { wch: 18 }, { wch: 22 }, { wch: 14 },
     { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 13 }, { wch: 10 },
-    { wch: 10 }, { wch: 16 }, { wch: 11 }, { wch: 20 },
+    { wch: 10 }, { wch: 16 }, { wch: 24 }, { wch: 11 }, { wch: 20 },
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Inscriptos')
@@ -196,6 +200,12 @@ function Dashboard() {
       s.collected += r.amount_paid || 0
       s.pending += Math.max(0, r.total_amount - (r.amount_paid || 0))
       s.seats += r.attendees.filter((a) => a.needs_seat).length
+      ;[...(r.merch_items || [])].forEach((m) => {
+        s.merch[m.name] = (s.merch[m.name] || 0) + m.qty
+      })
+      ;[...(r.snack_items || [])].forEach((sn) => {
+        s.snacks[sn.name] = (s.snacks[sn.name] || 0) + sn.qty
+      })
       EVENT.days.forEach((d) => {
         r.attendees.forEach((a) => {
           if ((d.id === 'sab' && a.day_sab) || (d.id === 'dom' && a.day_dom))
@@ -211,6 +221,8 @@ function Dashboard() {
       pending: 0,
       seats: 0,
       perDay: { sab: 0, dom: 0 },
+      merch: {},
+      snacks: {},
     }
   )
 
@@ -275,6 +287,43 @@ function Dashboard() {
           accent="gold"
         />
       </div>
+
+      {/* Resumen de merch y comida pedidos (para coordinar) */}
+      {(Object.keys(stats.merch).length > 0 ||
+        Object.keys(stats.snacks).length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Object.keys(stats.merch).length > 0 && (
+            <div className="card p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                Merch pedido (a coordinar)
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-ink/80">
+                {Object.entries(stats.merch).map(([name, qty]) => (
+                  <li key={name} className="flex justify-between">
+                    <span>{name}</span>
+                    <span className="font-semibold">{qty}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {Object.keys(stats.snacks).length > 0 && (
+            <div className="card p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                Comida y bebida pedida
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-ink/80">
+                {Object.entries(stats.snacks).map(([name, qty]) => (
+                  <li key={name} className="flex justify-between">
+                    <span>{name}</span>
+                    <span className="font-semibold">{qty}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filtro */}
       <div className="flex gap-2">
@@ -508,6 +557,23 @@ function ReservationCard({
               ))}
             </tbody>
           </table>
+
+          {(r.merch_items?.length > 0 || r.snack_items?.length > 0) && (
+            <div className="mt-3 border-t border-ink/10 pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink/50">
+                Merch / comida pedidos
+              </p>
+              <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink/70">
+                {[...(r.merch_items || []), ...(r.snack_items || [])].map(
+                  (item) => (
+                    <li key={item.id}>
+                      {item.qty}× {item.name}
+                    </li>
+                  )
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

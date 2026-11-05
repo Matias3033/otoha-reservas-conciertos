@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { EVENT, CATEGORIES, PAYMENT_METHODS, formatARS } from '../lib/event'
+import {
+  EVENT,
+  CATEGORIES,
+  PAYMENT_METHODS,
+  MERCH,
+  SNACKS,
+  formatARS,
+} from '../lib/event'
 import {
   priceForAttendee,
   totalForReservation,
@@ -33,6 +40,12 @@ export default function RegistrationForm({ onRegistered }) {
     needs_seat: false,
   })
   const [others, setOthers] = useState([])
+  const [merchQty, setMerchQty] = useState(() =>
+    Object.fromEntries(MERCH.map((m) => [m.id, 0]))
+  )
+  const [snackQty, setSnackQty] = useState(() =>
+    Object.fromEntries(SNACKS.map((s) => [s.id, 0]))
+  )
   const [paymentMethod, setPaymentMethod] = useState('transferencia')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -61,8 +74,27 @@ export default function RegistrationForm({ onRegistered }) {
     return list
   }
 
+  // Arma la lista de items pedidos (merch o comida) a partir de un
+  // catálogo y un objeto { id: cantidad }. Solo incluye lo que tiene qty > 0.
+  function buildSelectedItems(catalog, qtyById) {
+    return catalog
+      .filter((item) => (qtyById[item.id] || 0) > 0)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        qty: qtyById[item.id],
+      }))
+  }
+
+  function setQty(setter, id, delta) {
+    setter((prev) => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }))
+  }
+
   const attendees = buildAttendees()
   const total = totalForReservation(attendees)
+  const merchItems = buildSelectedItems(MERCH, merchQty)
+  const snackItems = buildSelectedItems(SNACKS, snackQty)
 
   function updateOther(key, patch) {
     setOthers((prev) =>
@@ -113,6 +145,8 @@ export default function RegistrationForm({ onRegistered }) {
       student_name: registrar.student_name.trim() || null,
       total_amount: total,
       payment_method: total > 0 ? paymentMethod : null,
+      merch_items: merchItems,
+      snack_items: snackItems,
     })
 
     if (rErr) {
@@ -153,6 +187,8 @@ export default function RegistrationForm({ onRegistered }) {
         student_name: registrar.student_name.trim() || null,
         total_amount: total,
         payment_method: total > 0 ? paymentMethod : null,
+        merch_items: merchItems,
+        snack_items: snackItems,
       },
       attendees: rows,
     }
@@ -176,6 +212,8 @@ export default function RegistrationForm({ onRegistered }) {
       total,
       paymentMethod: total > 0 ? paymentMethod : null,
       attendees,
+      merchItems,
+      snackItems,
     })
   }
 
@@ -291,6 +329,69 @@ export default function RegistrationForm({ onRegistered }) {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Merch de Otoha */}
+      <section className="card p-6">
+        <h2 className="text-lg font-bold text-ink">Merch de Otoha</h2>
+        <p className="mt-1 text-sm text-ink/55">
+          Diseño y confección por Sakura Indumentaria. Esto no suma al total
+          de la reserva: solo queda anotado tu interés y coordinamos talle,
+          disponibilidad y pago aparte, como en el sitio de Otoha.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {MERCH.map((m) => (
+            <div
+              key={m.id}
+              className="flex gap-3 rounded-xl border border-ink/10 bg-cream p-3"
+            >
+              <img
+                src={m.image}
+                alt={m.name}
+                className="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
+                loading="lazy"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-ink">{m.name}</p>
+                <p className="text-xs text-ink/55">
+                  {formatARS(m.price)} orientativo
+                </p>
+                <Stepper
+                  value={merchQty[m.id]}
+                  onChange={(delta) => setQty(setMerchQty, m.id, delta)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Comida y bebida */}
+      <section className="card p-6">
+        <h2 className="text-lg font-bold text-ink">Comida y bebida</h2>
+        <p className="mt-1 text-sm text-ink/55">
+          Opcional. Tampoco suma al total: se coordina y paga aparte el día
+          del evento.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {SNACKS.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center justify-between rounded-xl border border-ink/10 bg-cream p-3"
+            >
+              <div>
+                <p className="font-medium text-ink">{s.name}</p>
+                <p className="text-xs text-ink/55">
+                  {formatARS(s.price)} orientativo
+                </p>
+              </div>
+              <Stepper
+                value={snackQty[s.id]}
+                onChange={(delta) => setQty(setSnackQty, s.id, delta)}
+              />
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Método de pago (sólo si hay monto a abonar) */}
@@ -444,6 +545,31 @@ function AttendeeFields({ data, onChange, toggleDay, price, hideName }) {
           {price > 0 ? formatARS(price) : 'Sin cargo'}
         </span>
       </div>
+    </div>
+  )
+}
+
+function Stepper({ value, onChange }) {
+  return (
+    <div className="mt-2 inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(-1)}
+        disabled={value === 0}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-ink/15 text-ink/70 hover:border-wine hover:text-wine disabled:opacity-30"
+      >
+        −
+      </button>
+      <span className="w-5 text-center text-sm font-semibold text-ink">
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(1)}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-ink/15 text-ink/70 hover:border-wine hover:text-wine"
+      >
+        +
+      </button>
     </div>
   )
 }

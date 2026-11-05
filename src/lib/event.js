@@ -48,6 +48,82 @@ export const PAYMENT = {
   cashNote: 'Podés abonar en efectivo en la puerta el día del evento.',
 }
 
+// =====================================================================
+// Merch de Otoha (en colaboración con Sakura Indumentaria).
+// Cargado a mano desde otohamusica.com.ar/merch — el sitio de Otoha no
+// tiene una API pública, así que no se puede traer en vivo. Si cambian
+// productos, fotos o precios, actualizá este array.
+// No suma al total de la reserva: solo queda anotado el interés y se
+// coordina disponibilidad/talle/pago aparte (igual que hoy por WhatsApp).
+// =====================================================================
+export const MERCH = [
+  {
+    id: 'remera',
+    name: 'Remera de Otoha',
+    price: 30000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fremera-otoha.jpeg&w=1080&q=75',
+    description:
+      'Algodón peinado 24-1, estampado frontal y posterior en rosado. A elección: frase posterior, color de remera y de la frase.',
+  },
+  {
+    id: 'taza',
+    name: 'Taza de cerámica',
+    price: 13000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Ftaza-otoha.jpeg&w=1080&q=75',
+    description: 'Con estampado. Incluye box. A elección: frase para la taza.',
+  },
+  {
+    id: 'vaso',
+    name: 'Vaso térmico',
+    price: 12000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fvaso-termico-otoha.jpeg&w=1080&q=75',
+    description: 'De plástico, con estampado. A elección: frase para el vaso.',
+  },
+  {
+    id: 'gorra-trucker',
+    name: 'Gorra Trucker',
+    price: 13000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fgorra-trucker-otoha.jpeg&w=1080&q=75',
+    description: 'Tipo trucker, con red posterior y estampado de la academia.',
+  },
+  {
+    id: 'gorra-gabardina',
+    name: 'Gorra de gabardina',
+    price: 14000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fgorra-gabardina-otoha.jpeg&w=1080&q=75',
+    description: 'Tipo gabardina, con estampado de la academia.',
+  },
+  {
+    id: 'llavero',
+    name: 'Llavero Otoha',
+    price: 2000,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fllavero-otoha.jpeg&w=1080&q=75',
+    description:
+      'Cinta lanyard de 2cm, reforzado con remache y argolla para llaves.',
+  },
+  {
+    id: 'bolsa',
+    name: 'Bolsa de Friselina',
+    price: 2500,
+    image:
+      'https://www.otohamusica.com.ar/_next/image?url=%2Fmerch%2Fbolsa-friselina-otoha.jpeg&w=1080&q=75',
+    description: 'Con estampado de Otoha. A elección: frase.',
+  },
+]
+
+// Comida y bebida para pedir junto con la reserva. EDITÁ los precios reales.
+// Tampoco suma al total: se coordina y paga aparte, igual que el merch.
+export const SNACKS = [
+  { id: 'sanguchito', name: 'Sanguchito', price: 1500 }, // EDITAR precio real
+  { id: 'agua', name: 'Agua', price: 1000 }, // EDITAR precio real
+]
+
 // Formatea un número como pesos argentinos
 export function formatARS(n) {
   return new Intl.NumberFormat('es-AR', {

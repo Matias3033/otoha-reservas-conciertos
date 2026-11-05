@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { PAYMENT, formatARS } from '../lib/event'
 
 export default function PaymentScreen({ result, onDone }) {
-  const { reservation, total } = result
+  const { reservation, total, merchItems = [], snackItems = [] } = result
   const [copied, setCopied] = useState('')
+  const extras = [...merchItems, ...snackItems]
 
   function copy(text, label) {
     navigator.clipboard?.writeText(text)
@@ -23,6 +24,31 @@ export default function PaymentScreen({ result, onDone }) {
           esperamos en el evento.
         </p>
       </section>
+
+      {extras.length > 0 && (
+        <section className="card p-6">
+          <h3 className="text-base font-bold text-ink">
+            Merch y comida pedidos
+          </h3>
+          <p className="mt-1 text-sm text-ink/55">
+            No está incluido en el total de arriba. Te contactamos para
+            coordinar disponibilidad y pago.
+          </p>
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {extras.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between text-ink/80"
+              >
+                <span>
+                  {item.qty}× {item.name}
+                </span>
+                <span className="text-ink/50">{formatARS(item.price)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {total > 0 ? (
         <>
